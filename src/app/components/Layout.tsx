@@ -22,8 +22,7 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -141,7 +140,7 @@ export function Layout({ children }: LayoutProps) {
             <button
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="w-full text-left px-4 py-3 rounded-2xl mb-1 transition-all duration-200 flex items-center gap-2 text-red-600 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              className="w-full text-left px-4 py-3 rounded-2xl mb-1 transition-all duration-200 flex items-center gap-2 text-red-600 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <LogOut size={18} />
               {isLoggingOut ? 'Saindo...' : 'Sair'}
