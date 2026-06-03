@@ -11,6 +11,7 @@ import { Relatorios } from './components/Relatorios';
 import { Vencimentos } from './components/Vencimentos';
 import { Configuracoes } from './components/Configuracoes';
 import { Ajuda } from './components/Ajuda';
+import { supabase } from '../utils/supabase';
 
 function AppRoutes() {
   return (
