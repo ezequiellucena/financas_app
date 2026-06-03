@@ -1,4 +1,7 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { supabase } from '../../utils/supabase';
+import * as supabaseApi from '../services/supabaseApi';
+import { toast } from 'sonner';
 
 export interface DespesaFixa {
   id: string;
@@ -59,31 +62,33 @@ interface FinanceContextType {
   mesAtualSelecionado: string;
   todosMeses: string[];
   anoSelecionado: number;
+  isLoading: boolean;
+  userId: string | null;
 
   setMesAtualSelecionado: (mes: string) => void;
   setAnoSelecionado: (ano: number) => void;
-  addDespesaFixa: (despesa: Omit<DespesaFixa, 'id'>) => void;
-  updateDespesaFixa: (id: string, despesa: Omit<DespesaFixa, 'id'>) => void;
-  deleteDespesaFixa: (id: string) => void;
+  addDespesaFixa: (despesa: Omit<DespesaFixa, 'id'>) => Promise<void>;
+  updateDespesaFixa: (id: string, despesa: Omit<DespesaFixa, 'id'>) => Promise<void>;
+  deleteDespesaFixa: (id: string) => Promise<void>;
 
-  addCartao: (cartao: Omit<Cartao, 'id'>) => void;
-  updateCartao: (id: string, cartao: Omit<Cartao, 'id'>) => void;
-  deleteCartao: (id: string) => void;
+  addCartao: (cartao: Omit<Cartao, 'id'>) => Promise<void>;
+  updateCartao: (id: string, cartao: Omit<Cartao, 'id'>) => Promise<void>;
+  deleteCartao: (id: string) => Promise<void>;
 
-  addGastoVariavel: (gasto: Omit<GastoVariavel, 'id'>) => void;
-  updateGastoVariavel: (id: string, gasto: Omit<GastoVariavel, 'id'>) => void;
-  deleteGastoVariavel: (id: string) => void;
+  addGastoVariavel: (gasto: Omit<GastoVariavel, 'id'>) => Promise<void>;
+  updateGastoVariavel: (id: string, gasto: Omit<GastoVariavel, 'id'>) => Promise<void>;
+  deleteGastoVariavel: (id: string) => Promise<void>;
 
-  addMeta: (meta: Omit<Meta, 'id'>) => void;
-  deleteMeta: (id: string) => void;
+  addMeta: (meta: Omit<Meta, 'id'>) => Promise<void>;
+  deleteMeta: (id: string) => Promise<void>;
 
-  updateSalario: (valor: number) => void;
+  updateSalario: (valor: number) => Promise<void>;
 
-  addGastoComCartao: (gastoNome: string, valorTotal: number, despesaId: string, cartaoId: string, numeroParcelas: number) => void;
+  addGastoComCartao: (gastoNome: string, valorTotal: number, despesaId: string, cartaoId: string, numeroParcelas: number) => Promise<void>;
 
   addCategoria: (categoria: string) => void;
 
-  addRelatorioExportado: (relatorio: Omit<RelatorioExportado, 'id'>) => void;
+  addRelatorioExportado: (relatorio: Omit<RelatorioExportado, 'id'>) => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -95,104 +100,95 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
 
-  // Estado para armazenar dados de todos os meses
-  const [dadosPorMes, setDadosPorMes] = useState<Record<string, DadosMensais>>(() => {
-    const mesAtual = getMesAtualKey();
-
-    // Criar apenas o mês atual na inicialização
-    return {
-      [mesAtual]: {
-        mesAno: mesAtual,
-        despesasFixas: [
-          { id: '1', nome: 'Apartamento', valor: 645, vencimento: '17', categoria: 'Moradia' },
-          { id: '2', nome: 'Condomínio', valor: 170, vencimento: '05', categoria: 'Moradia' },
-          { id: '3', nome: 'Luz', valor: 400, vencimento: '11', categoria: 'Utilidades' },
-          { id: '4', nome: 'Água', valor: 90, vencimento: '27', categoria: 'Utilidades' },
-          { id: '5', nome: 'Internet', valor: 120, vencimento: '10', categoria: 'Utilidades' },
-          { id: '6', nome: 'Carro', valor: 870, vencimento: '30', categoria: 'Transporte' },
-          { id: '7', nome: 'Seguro', valor: 250, vencimento: '30', categoria: 'Transporte' },
-          { id: '8', nome: 'Gasolina', valor: 900, vencimento: '30', categoria: 'Transporte' },
-          { id: '9', nome: 'Lava Jato', valor: 100, vencimento: '30', categoria: 'Transporte' },
-          { id: '10', nome: 'Escola Gabi', valor: 633, vencimento: '08', categoria: 'Educação' },
-          { id: '11', nome: 'Transporte Escolar', valor: 140, vencimento: '08', categoria: 'Educação' },
-          { id: '12', nome: 'Mesada Gabi', valor: 50, vencimento: '08', categoria: 'Educação' },
-          { id: '13', nome: 'Natação', valor: 120, vencimento: '15', categoria: 'Educação' },
-        ],
-        cartoes: [
-          { id: '1', apelido: 'Nubank Ezequiel', bandeira: 'Nubank', valor: 35, vencimento: '10' },
-          { id: '2', apelido: 'BB Ezequiel', bandeira: 'Banco do Brasil', valor: 1510, vencimento: '02' },
-          { id: '3', apelido: 'Itaú Ezequiel', bandeira: 'Itaú', valor: 350, vencimento: '02' },
-          { id: '4', apelido: 'Nubank Cinthia', bandeira: 'Nubank', valor: 419, vencimento: '06' },
-        ],
-        gastosVariaveis: [
-          { id: '1', nome: 'Supermercado', valor: 85, createdAt: new Date() },
-          { id: '2', nome: 'Farmácia', valor: 100, createdAt: new Date() },
-          { id: '3', nome: 'Cinthia', valor: 73, createdAt: new Date() },
-          { id: '4', nome: 'Rafael', valor: 40, createdAt: new Date() },
-        ],
-        metas: [],
-        salario: 7200
-      }
-    };
-  });
-
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dadosPorMes, setDadosPorMes] = useState<Record<string, DadosMensais>>({});
   const [mesAtualSelecionado, setMesAtualSelecionadoInterno] = useState(getMesAtualKey());
   const [anoSelecionado, setAnoSelecionadoInterno] = useState(new Date().getFullYear());
+  const [categorias, setCategorias] = useState<string[]>([
+    'Moradia',
+    'Utilidades',
+    'Transporte',
+    'Educação',
+    'Alimentação',
+    'Saúde',
+    'Lazer',
+    'Investimentos',
+    'Outros'
+  ]);
+  const [relatoriosExportados, setRelatoriosExportados] = useState<RelatorioExportado[]>([]);
+
+  // Get current user on mount
+  useEffect(() => {
+    const initializeUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setUserId(user.id);
+          // Load initial data for current month
+          await loadMonthData(getMesAtualKey(), user.id);
+        }
+      } catch (error) {
+        console.error('Error initializing user:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeUser();
+  }, []);
+
+  // Load data for a specific month
+  const loadMonthData = async (mesAno: string, uid: string) => {
+    try {
+      const [despesasFixas, cartoes, gastosVariaveis, metas, salario] = await Promise.all([
+        supabaseApi.getDespesasFixas(mesAno, uid),
+        supabaseApi.getCartoes(mesAno, uid),
+        supabaseApi.getGastosVariaveis(mesAno, uid),
+        supabaseApi.getMetas(mesAno, uid),
+        supabaseApi.getSalario(mesAno, uid),
+      ]);
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAno]: {
+          mesAno,
+          despesasFixas,
+          cartoes,
+          gastosVariaveis,
+          metas,
+          salario: salario || 7200,
+        }
+      }));
+    } catch (error) {
+      console.error('Error loading month data:', error);
+      toast.error('Erro ao carregar dados');
+    }
+  };
 
   // Wrapper para setMesAtualSelecionado que também atualiza o ano
   const setMesAtualSelecionado = (novoMes: string) => {
     setMesAtualSelecionadoInterno(novoMes);
     const [ano] = novoMes.split('-').map(Number);
     setAnoSelecionadoInterno(ano);
+    
+    // Load data for the new month if not already loaded
+    if (userId && !dadosPorMes[novoMes]) {
+      loadMonthData(novoMes, userId);
+    }
   };
 
   // Obter dados do mês atual selecionado
   const getDadosMesAtual = (): DadosMensais => {
     if (!dadosPorMes[mesAtualSelecionado]) {
-      // Se o mês não existe, copiar Despesas Fixas, Cartões e Metas do mês mais próximo
-      const mesesOrdenados = Object.keys(dadosPorMes).sort();
-
-      // Tentar encontrar o mês anterior
-      const mesAnterior = mesesOrdenados
-        .filter(m => m < mesAtualSelecionado)
-        .sort()
-        .reverse()[0];
-
-      // Se não houver mês anterior, pegar o próximo disponível
-      const mesReferencia = mesAnterior || mesesOrdenados[0];
-      const dadosMesReferencia = mesReferencia ? dadosPorMes[mesReferencia] : null;
-
-      const novosDados: DadosMensais = {
+      return {
         mesAno: mesAtualSelecionado,
-        // Copiar Despesas Fixas do mês de referência (com novos IDs)
-        despesasFixas: dadosMesReferencia
-          ? dadosMesReferencia.despesasFixas.map(d => ({
-              ...d,
-              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-            }))
-          : [],
-        // Copiar Cartões do mês de referência (com novos IDs)
-        cartoes: dadosMesReferencia
-          ? dadosMesReferencia.cartoes.map(c => ({
-              ...c,
-              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-            }))
-          : [],
-        // Gastos Variáveis começam VAZIOS
+        despesasFixas: [],
+        cartoes: [],
         gastosVariaveis: [],
-        // Copiar Metas do mês de referência (com novos IDs)
-        metas: dadosMesReferencia
-          ? dadosMesReferencia.metas.map(m => ({
-              ...m,
-              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-            }))
-          : [],
-        // Copiar Salário do mês de referência
-        salario: dadosMesReferencia?.salario || 7200
+        metas: [],
+        salario: 7200
       };
-
-      setDadosPorMes({ ...dadosPorMes, [mesAtualSelecionado]: novosDados });
-      return novosDados;
     }
     return dadosPorMes[mesAtualSelecionado];
   };
@@ -207,114 +203,270 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Lista de todos os meses disponíveis
   const todosMeses = Object.keys(dadosPorMes).sort().reverse();
 
-  const [categorias, setCategorias] = useState<string[]>([
-    'Moradia',
-    'Utilidades',
-    'Transporte',
-    'Educação',
-    'Alimentação',
-    'Saúde',
-    'Lazer',
-    'Investimentos',
-    'Outros'
-  ]);
-
-  const [relatoriosExportados, setRelatoriosExportados] = useState<RelatorioExportado[]>([]);
-
-  // Função auxiliar para atualizar dados do mês atual
-  const updateDadosMesAtual = (updater: (dados: DadosMensais) => DadosMensais) => {
-    setDadosPorMes(prev => ({
-      ...prev,
-      [mesAtualSelecionado]: updater(prev[mesAtualSelecionado] || getDadosMesAtual())
-    }));
-  };
-
   // Despesas Fixas
-  const addDespesaFixa = (despesa: Omit<DespesaFixa, 'id'>) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      despesasFixas: [...dados.despesasFixas, { ...despesa, id: Date.now().toString() }]
-    }));
+  const addDespesaFixa = async (despesa: Omit<DespesaFixa, 'id'>) => {
+    if (!userId) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+    try {
+      const newDespesa = await supabaseApi.createDespesaFixa({
+        ...despesa,
+        mes_ano: mesAtualSelecionado,
+        user_id: userId,
+      });
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          despesasFixas: [...prev[mesAtualSelecionado].despesasFixas, newDespesa],
+        }
+      }));
+      toast.success('Despesa fixa adicionada');
+    } catch (error) {
+      console.error('Error adding despesa fixa:', error);
+      toast.error('Erro ao adicionar despesa fixa');
+    }
   };
 
-  const updateDespesaFixa = (id: string, despesa: Omit<DespesaFixa, 'id'>) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      despesasFixas: dados.despesasFixas.map(d => d.id === id ? { ...despesa, id } : d)
-    }));
+  const updateDespesaFixa = async (id: string, despesa: Omit<DespesaFixa, 'id'>) => {
+    try {
+      await supabaseApi.updateDespesaFixa(id, despesa);
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          despesasFixas: prev[mesAtualSelecionado].despesasFixas.map(d =>
+            d.id === id ? { ...despesa, id } : d
+          ),
+        }
+      }));
+      toast.success('Despesa fixa atualizada');
+    } catch (error) {
+      console.error('Error updating despesa fixa:', error);
+      toast.error('Erro ao atualizar despesa fixa');
+    }
   };
 
-  const deleteDespesaFixa = (id: string) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      despesasFixas: dados.despesasFixas.filter(d => d.id !== id)
-    }));
+  const deleteDespesaFixa = async (id: string) => {
+    try {
+      await supabaseApi.deleteDespesaFixa(id);
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          despesasFixas: prev[mesAtualSelecionado].despesasFixas.filter(d => d.id !== id),
+        }
+      }));
+      toast.success('Despesa fixa removida');
+    } catch (error) {
+      console.error('Error deleting despesa fixa:', error);
+      toast.error('Erro ao remover despesa fixa');
+    }
   };
 
   // Cartões
-  const addCartao = (cartao: Omit<Cartao, 'id'>) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      cartoes: [...dados.cartoes, { ...cartao, id: Date.now().toString() }]
-    }));
+  const addCartao = async (cartao: Omit<Cartao, 'id'>) => {
+    if (!userId) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+    try {
+      const newCartao = await supabaseApi.createCartao({
+        ...cartao,
+        mes_ano: mesAtualSelecionado,
+        user_id: userId,
+      });
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          cartoes: [...prev[mesAtualSelecionado].cartoes, newCartao],
+        }
+      }));
+      toast.success('Cartão adicionado');
+    } catch (error) {
+      console.error('Error adding cartao:', error);
+      toast.error('Erro ao adicionar cartão');
+    }
   };
 
-  const updateCartao = (id: string, cartao: Omit<Cartao, 'id'>) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      cartoes: dados.cartoes.map(c => c.id === id ? { ...cartao, id } : c)
-    }));
+  const updateCartao = async (id: string, cartao: Omit<Cartao, 'id'>) => {
+    try {
+      await supabaseApi.updateCartao(id, cartao);
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          cartoes: prev[mesAtualSelecionado].cartoes.map(c =>
+            c.id === id ? { ...cartao, id } : c
+          ),
+        }
+      }));
+      toast.success('Cartão atualizado');
+    } catch (error) {
+      console.error('Error updating cartao:', error);
+      toast.error('Erro ao atualizar cartão');
+    }
   };
 
-  const deleteCartao = (id: string) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      cartoes: dados.cartoes.filter(c => c.id !== id)
-    }));
+  const deleteCartao = async (id: string) => {
+    try {
+      await supabaseApi.deleteCartao(id);
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          cartoes: prev[mesAtualSelecionado].cartoes.filter(c => c.id !== id),
+        }
+      }));
+      toast.success('Cartão removido');
+    } catch (error) {
+      console.error('Error deleting cartao:', error);
+      toast.error('Erro ao remover cartão');
+    }
   };
 
   // Gastos Variáveis
-  const addGastoVariavel = (gasto: Omit<GastoVariavel, 'id' | 'createdAt'>) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      gastosVariaveis: [...dados.gastosVariaveis, { ...gasto, id: Date.now().toString(), createdAt: new Date() }]
-    }));
+  const addGastoVariavel = async (gasto: Omit<GastoVariavel, 'id'>) => {
+    if (!userId) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+    try {
+      const newGasto = await supabaseApi.createGastoVariavel({
+        nome: gasto.nome,
+        valor: gasto.valor,
+        mes_ano: mesAtualSelecionado,
+        user_id: userId,
+      });
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          gastosVariaveis: [...prev[mesAtualSelecionado].gastosVariaveis, newGasto],
+        }
+      }));
+      toast.success('Gasto adicionado');
+    } catch (error) {
+      console.error('Error adding gasto variavel:', error);
+      toast.error('Erro ao adicionar gasto');
+    }
   };
 
-  const updateGastoVariavel = (id: string, gasto: Omit<GastoVariavel, 'id' | 'createdAt'>) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      gastosVariaveis: dados.gastosVariaveis.map(g => g.id === id ? { ...gasto, id, createdAt: g.createdAt } : g)
-    }));
+  const updateGastoVariavel = async (id: string, gasto: Omit<GastoVariavel, 'id'>) => {
+    try {
+      const updated = await supabaseApi.updateGastoVariavel(id, {
+        nome: gasto.nome,
+        valor: gasto.valor,
+      });
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          gastosVariaveis: prev[mesAtualSelecionado].gastosVariaveis.map(g =>
+            g.id === id ? updated : g
+          ),
+        }
+      }));
+      toast.success('Gasto atualizado');
+    } catch (error) {
+      console.error('Error updating gasto variavel:', error);
+      toast.error('Erro ao atualizar gasto');
+    }
   };
 
-  const deleteGastoVariavel = (id: string) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      gastosVariaveis: dados.gastosVariaveis.filter(g => g.id !== id)
-    }));
+  const deleteGastoVariavel = async (id: string) => {
+    try {
+      await supabaseApi.deleteGastoVariavel(id);
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          gastosVariaveis: prev[mesAtualSelecionado].gastosVariaveis.filter(g => g.id !== id),
+        }
+      }));
+      toast.success('Gasto removido');
+    } catch (error) {
+      console.error('Error deleting gasto variavel:', error);
+      toast.error('Erro ao remover gasto');
+    }
   };
 
   // Metas
-  const addMeta = (meta: Omit<Meta, 'id'>) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      metas: [...dados.metas, { ...meta, id: Date.now().toString() }]
-    }));
+  const addMeta = async (meta: Omit<Meta, 'id'>) => {
+    if (!userId) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+    try {
+      const newMeta = await supabaseApi.createMeta({
+        ...meta,
+        mes_ano: mesAtualSelecionado,
+        user_id: userId,
+      });
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          metas: [...prev[mesAtualSelecionado].metas, newMeta],
+        }
+      }));
+      toast.success('Meta adicionada');
+    } catch (error) {
+      console.error('Error adding meta:', error);
+      toast.error('Erro ao adicionar meta');
+    }
   };
 
-  const deleteMeta = (id: string) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      metas: dados.metas.filter(m => m.id !== id)
-    }));
+  const deleteMeta = async (id: string) => {
+    try {
+      await supabaseApi.deleteMeta(id);
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          metas: prev[mesAtualSelecionado].metas.filter(m => m.id !== id),
+        }
+      }));
+      toast.success('Meta removida');
+    } catch (error) {
+      console.error('Error deleting meta:', error);
+      toast.error('Erro ao remover meta');
+    }
   };
 
-  const updateSalario = (valor: number) => {
-    updateDadosMesAtual(dados => ({
-      ...dados,
-      salario: valor
-    }));
+  const updateSalario = async (valor: number) => {
+    if (!userId) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+    try {
+      await supabaseApi.updateSalario(mesAtualSelecionado, userId, valor);
+
+      setDadosPorMes(prev => ({
+        ...prev,
+        [mesAtualSelecionado]: {
+          ...prev[mesAtualSelecionado],
+          salario: valor,
+        }
+      }));
+      toast.success('Salário atualizado');
+    } catch (error) {
+      console.error('Error updating salario:', error);
+      toast.error('Erro ao atualizar salário');
+    }
   };
 
   // Função para obter próximo mês
@@ -324,60 +476,75 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return `${proximaData.getFullYear()}-${String(proximaData.getMonth() + 1).padStart(2, '0')}`;
   };
 
-  // Adiciona gasto com cartão parcelado: debita da despesa fixa e adiciona ao cartão
-  const addGastoComCartao = (gastoNome: string, valorTotal: number, despesaId: string, cartaoId: string, numeroParcelas: number = 1) => {
-    const valorParcela = valorTotal / numeroParcelas;
-    let mesCorrente = mesAtualSelecionado;
+  // Adiciona gasto com cartão parcelado
+  const addGastoComCartao = async (gastoNome: string, valorTotal: number, despesaId: string, cartaoId: string, numeroParcelas: number = 1) => {
+    if (!userId) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+    try {
+      const valorParcela = valorTotal / numeroParcelas;
+      let mesCorrente = mesAtualSelecionado;
 
-    // Criar parcelas para cada mês
-    for (let parcela = 1; parcela <= numeroParcelas; parcela++) {
-      const nomeParcela = numeroParcelas > 1
-        ? `${gastoNome} (${parcela}/${numeroParcelas}x)`
-        : gastoNome;
+      for (let parcela = 1; parcela <= numeroParcelas; parcela++) {
+        const nomeParcela = numeroParcelas > 1
+          ? `${gastoNome} (${parcela}/${numeroParcelas}x)`
+          : gastoNome;
 
-      // Garantir que o mês existe
-      if (!dadosPorMes[mesCorrente]) {
-        getDadosMesAtual(); // Isso criará o mês se não existir
-      }
+        // Ensure month exists in state
+        if (!dadosPorMes[mesCorrente]) {
+          setDadosPorMes(prev => ({
+            ...prev,
+            [mesCorrente]: {
+              mesAno: mesCorrente,
+              despesasFixas: [],
+              cartoes: [],
+              gastosVariaveis: [],
+              metas: [],
+              salario: 7200,
+            }
+          }));
+        }
 
-      setDadosPorMes(prev => {
-        const dadosMes = prev[mesCorrente] || getDadosMesAtual();
-
-        // Adiciona aos gastos variáveis
-        const novosGastos = [...dadosMes.gastosVariaveis, {
-          id: `${Date.now()}-${parcela}-${Math.random().toString(36).substr(2, 9)}`,
+        // Create gasto
+        await supabaseApi.createGastoVariavel({
           nome: nomeParcela,
           valor: valorParcela,
-          createdAt: new Date()
-        }];
+          mes_ano: mesCorrente,
+          user_id: userId,
+        });
 
-        // Debita da despesa fixa (se foi selecionada)
-        const novasDespesas = despesaId
-          ? dadosMes.despesasFixas.map(d =>
-              d.id === despesaId ? { ...d, valor: Math.max(0, d.valor - valorParcela) } : d
-            )
-          : dadosMes.despesasFixas;
-
-        // Adiciona ao cartão (se foi selecionado)
-        const novosCartoes = cartaoId
-          ? dadosMes.cartoes.map(c =>
-              c.id === cartaoId ? { ...c, valor: c.valor + valorParcela } : c
-            )
-          : dadosMes.cartoes;
-
-        return {
-          ...prev,
-          [mesCorrente]: {
-            ...dadosMes,
-            gastosVariaveis: novosGastos,
-            despesasFixas: novasDespesas,
-            cartoes: novosCartoes
+        // Update despesa fixa
+        if (despesaId) {
+          const despesa = despesasFixas.find(d => d.id === despesaId);
+          if (despesa) {
+            await supabaseApi.updateDespesaFixa(despesaId, {
+              ...despesa,
+              valor: Math.max(0, despesa.valor - valorParcela),
+            });
           }
-        };
-      });
+        }
 
-      // Avançar para o próximo mês
-      mesCorrente = getProximoMes(mesCorrente);
+        // Update cartão
+        if (cartaoId) {
+          const cartao = cartoes.find(c => c.id === cartaoId);
+          if (cartao) {
+            await supabaseApi.updateCartao(cartaoId, {
+              ...cartao,
+              valor: cartao.valor + valorParcela,
+            });
+          }
+        }
+
+        mesCorrente = getProximoMes(mesCorrente);
+      }
+
+      toast.success('Gasto parcelado adicionado');
+      // Reload current month
+      await loadMonthData(mesAtualSelecionado, userId);
+    } catch (error) {
+      console.error('Error adding gasto com cartao:', error);
+      toast.error('Erro ao adicionar gasto parcelado');
     }
   };
 
@@ -388,29 +555,41 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Adiciona relatório exportado ao histórico
-  const addRelatorioExportado = (relatorio: Omit<RelatorioExportado, 'id'>) => {
-    const novoRelatorio: RelatorioExportado = {
-      ...relatorio,
-      id: Date.now().toString()
-    };
-    setRelatoriosExportados([novoRelatorio, ...relatoriosExportados]);
+  // Adiciona relatório exportado
+  const addRelatorioExportado = async (relatorio: Omit<RelatorioExportado, 'id'>) => {
+    if (!userId) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+    try {
+      const newRelatorio = await supabaseApi.createRelatorio({
+        dataExportacao: relatorio.dataExportacao,
+        periodo: relatorio.periodo,
+        totalDespesas: relatorio.totalDespesas,
+        totalReceitas: relatorio.totalReceitas,
+        saldo: relatorio.saldo,
+        userId,
+      });
+
+      setRelatoriosExportados([newRelatorio, ...relatoriosExportados]);
+      toast.success('Relatório exportado com sucesso');
+    } catch (error) {
+      console.error('Error adding relatorio:', error);
+      toast.error('Erro ao exportar relatório');
+    }
   };
 
   // Atualizar ano selecionado
   const handleSetAnoSelecionado = (ano: number) => {
     setAnoSelecionadoInterno(ano);
-
-    // Atualizar mês selecionado para janeiro do novo ano (ou mês atual se for o ano atual)
     const mesAtualReal = getMesAtualKey();
-    const [anoAtualReal, mesNumAtualReal] = mesAtualReal.split('-').map(Number);
+    const [anoAtualReal] = mesAtualReal.split('-').map(Number);
 
     if (ano === anoAtualReal) {
       setMesAtualSelecionadoInterno(mesAtualReal);
     } else {
       setMesAtualSelecionadoInterno(`${ano}-01`);
     }
-    // Os meses serão criados automaticamente quando navegados via getDadosMesAtual
   };
 
   return (
@@ -426,6 +605,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         mesAtualSelecionado,
         todosMeses,
         anoSelecionado,
+        isLoading,
+        userId,
         setMesAtualSelecionado,
         setAnoSelecionado: handleSetAnoSelecionado,
         addDespesaFixa,
