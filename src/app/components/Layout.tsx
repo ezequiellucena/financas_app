@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { useFinance } from '../context/FinanceContext';
+import { useAuth } from '../hooks/useAuth';
 import { MonthCarousel } from './MonthCarousel';
 import {
   Home,
@@ -8,8 +9,11 @@ import {
   PiggyBank,
   DollarSign,
   Menu,
-  X
+  X,
+  LogOut,
+  Settings
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface LayoutProps {
   children: ReactNode;
@@ -18,7 +22,10 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+  const { signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const mainMenuItems = [
     { path: '/', icon: Home, label: 'Início' },
@@ -43,6 +50,18 @@ export function Layout({ children }: LayoutProps) {
     return currentPage?.label || 'Controle Financeiro';
   };
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+      toast.success('Logout realizado com sucesso');
+      navigate('/login');
+    } catch (error) {
+      toast.error('Erro ao fazer logout');
+      setIsLoggingOut(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Floating Menu Button */}
@@ -52,6 +71,23 @@ export function Layout({ children }: LayoutProps) {
       >
         {menuOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
+
+      {/* Logout Button - Top Right */}
+      <button
+        onClick={handleLogout}
+        disabled={isLoggingOut}
+        className="fixed top-4 right-4 z-30 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-2xl shadow-lg transition-all duration-200 text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        title="Logout"
+      >
+        <LogOut size={20} />
+        <span className="text-sm font-medium hidden sm:inline">Sair</span>
+      </button>
+
+      {/* User Info - Top Center */}
+      <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-30 text-center">
+        <p className="text-xs text-muted-foreground">Conectado como</p>
+        <p className="text-sm font-medium text-foreground truncate max-w-xs">{user?.email}</p>
+      </div>
 
       {/* Header with Month Carousel */}
       <header className="sticky top-0 z-10">
@@ -81,6 +117,35 @@ export function Layout({ children }: LayoutProps) {
                 </button>
               );
             })}
+            
+            {/* Separator */}
+            <div className="my-2 h-px bg-border/30" />
+
+            {/* Settings Option */}
+            <button
+              onClick={() => {
+                navigate('/configuracoes');
+                setMenuOpen(false);
+              }}
+              className={`w-full text-left px-4 py-3 rounded-2xl mb-1 transition-all duration-200 flex items-center gap-2 ${
+                location.pathname === '/configuracoes'
+                  ? 'bg-primary text-primary-foreground font-medium shadow-lg shadow-primary/20'
+                  : 'text-foreground hover:bg-accent'
+              }`}
+            >
+              <Settings size={18} />
+              Configurações
+            </button>
+
+            {/* Logout Option */}
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="w-full text-left px-4 py-3 rounded-2xl mb-1 transition-all duration-200 flex items-center gap-2 text-red-600 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              <LogOut size={18} />
+              {isLoggingOut ? 'Saindo...' : 'Sair'}
+            </button>
           </nav>
         </div>
       )}
